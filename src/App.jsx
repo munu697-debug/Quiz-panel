@@ -5,72 +5,72 @@ const DEFAULT_QUIZ_QUESTIONS = [
   {
     id: 'q1',
     number: 1,
-    prompt: 'Which HTML element is the best choice for the main content region of a page?',
-    options: ['<section>', '<main>', '<article>', '<div>'],
-    correct: '<main>',
+    prompt: 'A landing page has a logo at the top, links to Home, About, Pricing, and a Get Started button. Which part is this?',
+    options: ['Navigation structure', 'Content section', 'Footer structure', 'Dashboard structure'],
+    correct: 'Navigation structure',
   },
   {
     id: 'q2',
     number: 2,
-    prompt: 'In CSS, which property controls the space between the border and the content inside an element?',
-    options: ['padding', 'margin', 'gap', 'border-spacing'],
-    correct: 'padding',
+    prompt: 'A product page shows a large product image, product name, price, short description, and Buy Now button together. What is this grouping best called?',
+    options: ['Footer', 'Navigation bar', 'Product card', 'Login form'],
+    correct: 'Product card',
   },
   {
     id: 'q3',
     number: 3,
-    prompt: 'Which JavaScript declaration keeps a value from being reassigned?',
-    options: ['let', 'var', 'const', 'function'],
-    correct: 'const',
+    prompt: 'A website looks beautiful, but users cannot easily find the main Book Appointment button. What is the biggest problem?',
+    options: ['Poor database design', 'Poor user experience', 'Poor domain setup', 'Poor server structure'],
+    correct: 'Poor user experience',
   },
   {
     id: 'q4',
     number: 4,
-    prompt: 'Which DOM API selects the first matching element in the document?',
-    options: ['document.find()', 'document.querySelector()', 'document.getElementById()', 'document.match()'],
-    correct: 'document.querySelector()',
+    prompt: 'A page has a huge heading, a smaller description, and one highly visible primary button. Which UI principle is being used?',
+    options: ['Database normalization', 'User authentication', 'Visual hierarchy', 'Server hosting'],
+    correct: 'Visual hierarchy',
   },
   {
     id: 'q5',
     number: 5,
-    prompt: 'What is the most common method to fetch JSON data from a server in the browser?',
-    options: ['Image()', 'fetch()', 'setTimeout()', 'XMLHttpRequest()'],
-    correct: 'fetch()',
+    prompt: 'On desktop, four course cards appear in one row. On mobile, they become one card per row. Why?',
+    options: ['Responsive layout', 'Dynamic content', 'Website navigation', 'Database structure'],
+    correct: 'Responsive layout',
   },
   {
     id: 'q6',
     number: 6,
-    prompt: 'Which accessibility attribute is most important for an informative image?',
-    options: ['aria-label', 'alt text', 'title', 'tabindex'],
-    correct: 'alt text',
+    prompt: 'Which checkout flow is most logical for an online store?',
+    options: ['Payment → Product → Cart → Confirmation → Checkout', 'Product → Cart → Checkout → Payment → Confirmation', 'Confirmation → Product → Payment → Cart → Checkout', 'Cart → Confirmation → Product → Checkout → Payment'],
+    correct: 'Product → Cart → Checkout → Payment → Confirmation',
   },
   {
     id: 'q7',
     number: 7,
-    prompt: 'Why is rel="noopener noreferrer" often added to external links opened in a new tab?',
-    options: ['It makes them load faster', 'It prevents security issues and tabnabbing', 'It hides the link from search engines', 'It forces the browser to cache them'],
-    correct: 'It prevents security issues and tabnabbing',
+    prompt: 'You must choose between two mobile login designs. Design A: Tiny text and a small Login button. Design B: Readable text, clear spacing, and an easy-to-tap button. Which is better?',
+    options: ['Design B', 'Design A', 'Both are equally usable', 'Neither needs mobile design'],
+    correct: 'Design B',
   },
   {
     id: 'q8',
     number: 8,
-    prompt: 'Which CSS layout tool is best for aligning items in rows or columns with responsive spacing?',
-    options: ['position: absolute', 'display: flex', 'text-align: center', 'float: left'],
-    correct: 'display: flex',
+    prompt: 'A dashboard has sidebar navigation, a welcome message, statistics cards, recent activity, and quick action buttons. Which statement is best?',
+    options: ['It combines information and actions', 'It is only a landing page', 'It is only a navigation bar', 'It is only a database'],
+    correct: 'It combines information and actions',
   },
   {
     id: 'q9',
     number: 9,
-    prompt: 'A server returns HTTP 404. What does that usually mean?',
-    options: ['The request was successful', 'The resource was not found', 'The server is overloaded', 'The page is being redirected'],
-    correct: 'The resource was not found',
+    prompt: 'Two buttons perform different actions. One is blue and filled, while the other is light and less prominent. Why might this be good UI?',
+    options: ['It creates action hierarchy', 'It removes user flow', 'It stores more data', 'It changes the domain'],
+    correct: 'It creates action hierarchy',
   },
   {
     id: 'q10',
     number: 10,
-    prompt: 'Which approach best supports mobile-friendly layouts on modern websites?',
-    options: ['Fixed 1200px widths everywhere', 'Responsive design with flexible layouts and media queries', 'Only using large desktop screenshots', 'Turning off CSS entirely on small screens'],
-    correct: 'Responsive design with flexible layouts and media queries',
+    prompt: 'A website works well on desktop, but on mobile the menu overlaps text, buttons go off-screen, and cards are cut off. What should be improved first?',
+    options: ['Footer content', 'Database security', 'Domain naming', 'Responsive design'],
+    correct: 'Responsive design',
   },
 ]
 
@@ -386,6 +386,9 @@ function App() {
     try {
       const data = await fetchJson('http://localhost:3001/api/questions/reset', {
         method: 'POST',
+        headers: {
+          'X-Admin-Code': ADMIN_CODE,
+        },
       })
       const normalizedQuestions = (data.questions || []).map((question, index) => normalizeQuestion(question, index))
       setQuestions(normalizedQuestions)
@@ -400,6 +403,9 @@ function App() {
     try {
       await fetchJson('http://localhost:3001/api/questions', {
         method: 'POST',
+        headers: {
+          'X-Admin-Code': ADMIN_CODE,
+        },
         body: JSON.stringify({
           prompt: nextQuestions.at(-1).prompt,
           options: nextQuestions.at(-1).options,
@@ -466,7 +472,7 @@ function App() {
       <a className="brand" href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}>
         <span className="brand-mark">✓</span>
         <span className="brand-copy">
-          <span className="brand-kicker">Web fundamentals</span>
+          <span className="brand-kicker">WEB FUNDAMENTALS</span>
           <span className="brand-title">Checkpoint</span>
         </span>
       </a>
@@ -855,7 +861,11 @@ function App() {
       <section className="landing-shell">
         <div className="landing-copy">
           <div className="pill">10 questions · one clear signal</div>
-          <h1>Make your next move obvious.</h1>
+          <h1>
+            <span>Make your</span><br />
+            <span className="highlight">next move</span><br />
+            <span>obvious.</span>
+          </h1>
           <p>
             A short web fundamentals checkpoint built to show you what is solid — and exactly what to sharpen next.
           </p>

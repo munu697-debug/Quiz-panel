@@ -2,11 +2,13 @@ import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
 import pg from 'pg'
+import { pathToFileURL } from 'node:url'
 
 dotenv.config()
 
-const app = express()
+export const app = express()
 const port = process.env.PORT || 3001
+const ADMIN_CODE = process.env.ADMIN_CODE || 'Demo@7078'
 const { Pool } = pg
 const hasDatabase = Boolean(process.env.DB_URL)
 
@@ -154,7 +156,17 @@ app.get('/api/results', async (_req, res) => {
   }
 })
 
-app.post('/api/questions', async (req, res) => {
+const requireAdmin = (req, res, next) => {
+  const adminCode = req.get('x-admin-code') || req.body?.adminCode
+
+  if (adminCode !== ADMIN_CODE) {
+    return res.status(401).json({ ok: false, error: 'Admin access required.' })
+  }
+
+  next()
+}
+
+app.post('/api/questions', requireAdmin, async (req, res) => {
   try {
     const { prompt, options, correct } = req.body || {}
 
@@ -184,7 +196,7 @@ app.post('/api/questions', async (req, res) => {
   }
 })
 
-app.post('/api/questions/reset', async (_req, res) => {
+app.post('/api/questions/reset', requireAdmin, async (_req, res) => {
   if (!pool) {
     inMemoryQuestions.length = 0
     DEFAULT_QUESTIONS.forEach((question, index) => {
@@ -258,4 +270,8 @@ const startServer = async () => {
   })
 }
 
-startServer()
+const isDirectExecution = process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url
+
+if (isDirectExecution) {
+  startServer()
+}
