@@ -75,6 +75,9 @@ const DEFAULT_QUIZ_QUESTIONS = [
 ]
 
 const STORAGE_QUESTIONS_KEY = 'quiz-custom-questions'
+const STORAGE_SECTIONS_KEY = 'quiz-sections'
+const STORAGE_PENDING_APPROVALS_KEY = 'quiz-pending-approvals'
+const STORAGE_APPROVED_EMAILS_KEY = 'quiz-approved-emails'
 const ADMIN_CODE = 'Demo@7078'
 const LEGACY_QUESTION_PROMPTS = [
   'Which HTML element is the best choice for the main content region of a page?',
@@ -131,6 +134,57 @@ const saveQuizQuestions = (questions) => {
   localStorage.setItem(STORAGE_QUESTIONS_KEY, JSON.stringify(questions))
 }
 
+const getSections = () => {
+  if (typeof window === 'undefined') return [{ id: 'section-1', heading: 'Section 1: Web Fundamentals', description: 'Please stay focused and keep the tab active while answering.' }]
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_SECTIONS_KEY) || 'null')
+    if (Array.isArray(saved) && saved.length > 0) {
+      return saved.map((section, index) => ({
+        id: section.id || `section-${index + 1}`,
+        heading: section.heading || `Section ${index + 1}`,
+        description: section.description || 'Please stay focused and keep the tab active while answering.',
+      }))
+    }
+  } catch {
+    // fall back to default sections
+  }
+
+  return [{ id: 'section-1', heading: 'Section 1: Web Fundamentals', description: 'Please stay focused and keep the tab active while answering.' }]
+}
+
+const saveSections = (sections) => {
+  localStorage.setItem(STORAGE_SECTIONS_KEY, JSON.stringify(sections))
+}
+
+const getPendingApprovals = () => {
+  if (typeof window === 'undefined') return []
+
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_PENDING_APPROVALS_KEY) || '[]')
+  } catch {
+    return []
+  }
+}
+
+const savePendingApprovals = (items) => {
+  localStorage.setItem(STORAGE_PENDING_APPROVALS_KEY, JSON.stringify(items))
+}
+
+const getApprovedEmails = () => {
+  if (typeof window === 'undefined') return []
+
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_APPROVED_EMAILS_KEY) || '[]')
+  } catch {
+    return []
+  }
+}
+
+const saveApprovedEmails = (items) => {
+  localStorage.setItem(STORAGE_APPROVED_EMAILS_KEY, JSON.stringify(items))
+}
+
 const getAttempts = () => {
   if (typeof window === 'undefined') return []
 
@@ -182,6 +236,82 @@ function App() {
   const [questionError, setQuestionError] = useState('')
   const [questionSuccess, setQuestionSuccess] = useState('')
   const [dbStatus, setDbStatus] = useState('checking')
+  const [sections, setSections] = useState(getSections)
+  const [selectedSectionId, setSelectedSectionId] = useState(getSections()[0]?.id || 'section-1')
+  const [pendingApprovals, setPendingApprovals] = useState(getPendingApprovals)
+  const [securityWarningCount, setSecurityWarningCount] = useState(0)
+  const [securityNotice, setSecurityNotice] = useState('')
+  const [quizSuspended, setQuizSuspended] = useState(false)
+  const [newSectionHeading, setNewSectionHeading] = useState('')
+  const [sectionError, setSectionError] = useState('')
+  const [sectionSuccess, setSectionSuccess] = useState('')
+
+  const activeSection = sections.find((section) => section.id === selectedSectionId) || sections[0] || { id: 'section-1', heading: 'Section 1: Web Fundamentals', description: 'Please stay focused and keep the tab active while answering.' }
+
+  useEffect(() => {
+    setSelectedSectionId((current) => {
+      if (current && sections.some((section) => section.id === current)) return current
+      return sections[0]?.id || 'section-1'
+    })
+  }, [sections])
+
+  useEffect(() => {
+    if (route !== '/quiz') return
+    if (!name || !email || quizSuspended) return
+
+    const registerSecurityWarning = (message) => {
+      setSecurityWarningCount((previousCount) => {
+        const nextCount = previousCount + 1
+        setSecurityNotice(`${message} Warning ${nextCount} of 3.`)
+
+        if (nextCount >= 3) {
+          const approvals = getPendingApprovals()
+          const nextApprovals = [
+            ...approvals,
+            {
+              id: Date.now(),
+              name: name.trim(),
+              email: email.trim().toLowerCase(),
+              heading: activeSection.heading,
+              createdAt: new Date().toISOString(),
+            },
+          ]
+          savePendingApprovals(nextApprovals)
+          setPendingApprovals(nextApprovals)
+          setQuizSuspended(true)
+          setSecurityNotice('Quiz closed automatically after three warnings. An admin must approve continued access before the user can resume.')
+        }
+
+        return nextCount
+      })
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        registerSecurityWarning('The quiz tab was left while the assessment was in progress.')
+      }
+    }
+
+    const handleBlur = () => {
+      registerSecurityWarning('The window lost focus while the assessment was active.')
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.getModifierState && event.getModifierState('CapsLock')) {
+        registerSecurityWarning('Caps Lock was activated during the assessment.')
+      }
+    }
+
+    window.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('blur', handleBlur)
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('blur', handleBlur)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [activeSection.heading, email, name, quizSuspended, route])
 
   useEffect(() => {
     const onLocationChange = () => setRoute(getCurrentPath())
@@ -285,14 +415,33 @@ function App() {
     )
 
     if (existingAttempt) {
-      setStartError('This email already has a completed checkpoint. Use “Find my result” to review it.')
+      setResult(existingAttempt)
+      setResultMatch(existingAttempt)
+      setLookupEmail(trimmedEmail)
+      setLookupError('')
+      navigate('/result')
       return
+    }
+
+    const pendingApproval = getPendingApprovals().find(
+      (approval) => approval.email === trimmedEmail && !approval.approved,
+    )
+
+    if (pendingApproval) {
+      const approvedEmails = getApprovedEmails()
+      if (!approvedEmails.includes(trimmedEmail)) {
+        setStartError('This attempt is waiting for admin approval after a security warning. Please try again after approval.')
+        return
+      }
     }
 
     setAnswers({})
     setCurrentIndex(0)
     setResult(null)
     setResultMatch(null)
+    setSecurityWarningCount(0)
+    setSecurityNotice('')
+    setQuizSuspended(false)
     navigate('/quiz')
   }
 
@@ -332,6 +481,8 @@ function App() {
       totalQuestions: questions.length,
       percentage,
       answers: answerList,
+      sectionId: activeSection.id,
+      sectionHeading: activeSection.heading,
       createdAt: new Date().toISOString(),
     }
 
@@ -423,6 +574,47 @@ function App() {
       setQuestions(DEFAULT_QUIZ_QUESTIONS)
       saveQuizQuestions(DEFAULT_QUIZ_QUESTIONS)
     }
+  }
+
+  const approvePendingAccess = (approvalId) => {
+    const approvals = getPendingApprovals().map((approval) =>
+      approval.id === approvalId ? { ...approval, approved: true } : approval,
+    )
+    const approvedEmails = new Set(getApprovedEmails())
+    const approvedApproval = approvals.find((approval) => approval.id === approvalId)
+    if (approvedApproval) {
+      approvedEmails.add(approvedApproval.email)
+      saveApprovedEmails([...approvedEmails])
+    }
+    savePendingApprovals(approvals.filter((approval) => approval.id !== approvalId))
+    setPendingApprovals(approvals.filter((approval) => approval.id !== approvalId))
+  }
+
+  const addSection = (event) => {
+    event.preventDefault()
+    const trimmedHeading = newSectionHeading.trim()
+
+    if (!trimmedHeading) {
+      setSectionError('Add a section heading before saving it.')
+      setSectionSuccess('')
+      return
+    }
+
+    const nextSections = [
+      ...sections,
+      {
+        id: `section-${Date.now()}`,
+        heading: trimmedHeading,
+        description: 'Please stay focused and keep the tab active while answering.',
+      },
+    ]
+
+    setSections(nextSections)
+    saveSections(nextSections)
+    setSelectedSectionId(nextSections[nextSections.length - 1].id)
+    setNewSectionHeading('')
+    setSectionError('')
+    setSectionSuccess('Section heading saved successfully.')
   }
 
   const syncQuestionToDb = async (nextQuestions) => {
@@ -635,6 +827,92 @@ function App() {
                     </button>
                   </div>
 
+                  <div className="table-card compact-table">
+                    <h2>Attempt summary</h2>
+                    <div className="question-table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Section</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {completedAttempts.length === 0 ? (
+                            <tr>
+                              <td colSpan="4">No attempts yet.</td>
+                            </tr>
+                          ) : (
+                            completedAttempts.slice().reverse().map((attempt) => (
+                              <tr key={attempt.id}>
+                                <td>{attempt.name}</td>
+                                <td>{attempt.email}</td>
+                                <td>{attempt.sectionHeading || attempt.section || 'General'}</td>
+                                <td className={attempt.percentage >= 70 ? 'status pass' : 'status'}>
+                                  {attempt.percentage >= 70 ? 'Pass' : 'Review'}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <form className="quiz-builder-form" onSubmit={addSection}>
+                    <label className="field">
+                      <span>Section heading</span>
+                      <input
+                        type="text"
+                        value={newSectionHeading}
+                        onChange={(event) => setNewSectionHeading(event.target.value)}
+                        placeholder="e.g. Section 2: UI Design Principles"
+                      />
+                    </label>
+
+                    {sectionError && <p className="form-error">{sectionError}</p>}
+                    {sectionSuccess && <p className="success-message">{sectionSuccess}</p>}
+
+                    <button type="submit" className="primary-button admin-button">
+                      Add section heading
+                      <span aria-hidden="true">＋</span>
+                    </button>
+                  </form>
+
+                  <div className="section-list">
+                    {sections.map((section) => (
+                      <div key={section.id} className={selectedSectionId === section.id ? 'section-card selected' : 'section-card'}>
+                        <div>
+                          <p className="eyebrow muted">Section</p>
+                          <h3>{section.heading}</h3>
+                        </div>
+                        <button type="button" className="secondary-button small-button" onClick={() => setSelectedSectionId(section.id)}>
+                          {selectedSectionId === section.id ? 'Selected' : 'Open'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {pendingApprovals.length > 0 && (
+                    <div className="approval-panel">
+                      <h3>Pending approval requests</h3>
+                      {pendingApprovals.map((approval) => (
+                        <div key={approval.id} className="approval-item">
+                          <div>
+                            <strong>{approval.name}</strong>
+                            <p>{approval.email}</p>
+                            <span>{approval.heading}</span>
+                          </div>
+                          <button type="button" className="secondary-button small-button" onClick={() => approvePendingAccess(approval.id)}>
+                            Approve
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <div className="question-table-wrap">
                     <table>
                       <thead>
@@ -720,10 +998,43 @@ function App() {
     const isLastQuestion = currentIndex === questions.length - 1
     const answeredCount = Object.keys(answers).length
 
+    if (quizSuspended) {
+      return (
+        <main className="page-shell">
+          {renderHeader('/')}
+          <section className="quiz-page">
+            <div className="locked-panel">
+              <p className="eyebrow">Assessment paused</p>
+              <h1>Quiz temporarily closed for review.</h1>
+              <p>
+                {securityNotice || 'The quiz was interrupted and requires admin approval before it can resume.'}
+              </p>
+              <div className="locked-actions">
+                <button type="button" className="secondary-button" onClick={() => navigate('/')}>
+                  Return home
+                </button>
+              </div>
+            </div>
+          </section>
+        </main>
+      )
+    }
+
     return (
       <main className="page-shell">
         {renderHeader()}
         <section className="quiz-page">
+          <div className="quiz-section-banner">
+            <p className="eyebrow">Current section</p>
+            <h3>{activeSection.heading}</h3>
+          </div>
+
+          {securityNotice && (
+            <div className="security-banner">
+              <strong>Warning:</strong> {securityNotice}
+            </div>
+          )}
+
           <div className="progress-wrap">
             <div>
               <p className="eyebrow">Web fundamentals / checkpoint</p>
@@ -887,6 +1198,8 @@ function App() {
     )
   }
 
+  const existingAttemptForEmail = email.trim() ? getAttempts().find((attempt) => attempt.email.toLowerCase() === email.trim().toLowerCase()) : null
+
   return (
     <main className="page-shell">
       {renderHeader('/')}
@@ -939,12 +1252,27 @@ function App() {
               </div>
             </label>
 
+            <div className="section-panel">
+              <p className="eyebrow muted">Available section</p>
+              {sections.map((section) => (
+                <div key={section.id} className={selectedSectionId === section.id ? 'section-card landing selected' : 'section-card landing'}>
+                  <div>
+                    <strong>{section.heading}</strong>
+                    <p>{section.description}</p>
+                  </div>
+                  <button type="button" className="secondary-button small-button" onClick={() => setSelectedSectionId(section.id)}>
+                    {selectedSectionId === section.id ? 'Opened' : 'Open'}
+                  </button>
+                </div>
+              ))}
+            </div>
+
             {startError && <p className="form-error">{startError}</p>}
 
             <button type="submit" className="primary-button full-width">
               <span>
-                <strong>Begin checkpoint</strong>
-                <small>About 4 minutes · one attempt</small>
+                <strong>{existingAttemptForEmail ? 'Continue to result' : 'Begin checkpoint'}</strong>
+                <small>{existingAttemptForEmail ? 'This email already has a completed attempt' : 'About 4 minutes · one attempt'}</small>
               </span>
               <span aria-hidden="true">→</span>
             </button>
