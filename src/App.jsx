@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
+import { filterQuestionsBySection } from './quizLogic.js'
 import './App.css'
 
 const DEFAULT_QUIZ_QUESTIONS = [
   {
     id: 'q1',
     number: 1,
+    sectionId: 'section-1',
     prompt: 'A landing page has a logo at the top, links to Home, About, Pricing, and a Get Started button. Which part is this?',
     options: ['Navigation structure', 'Content section', 'Footer structure', 'Dashboard structure'],
     correct: 'Navigation structure',
@@ -12,6 +14,7 @@ const DEFAULT_QUIZ_QUESTIONS = [
   {
     id: 'q2',
     number: 2,
+    sectionId: 'section-1',
     prompt: 'A product page shows a large product image, product name, price, short description, and Buy Now button together. What is this grouping best called?',
     options: ['Footer', 'Navigation bar', 'Product card', 'Login form'],
     correct: 'Product card',
@@ -19,6 +22,7 @@ const DEFAULT_QUIZ_QUESTIONS = [
   {
     id: 'q3',
     number: 3,
+    sectionId: 'section-1',
     prompt: 'A website looks beautiful, but users cannot easily find the main Book Appointment button. What is the biggest problem?',
     options: ['Poor database design', 'Poor user experience', 'Poor domain setup', 'Poor server structure'],
     correct: 'Poor user experience',
@@ -26,6 +30,7 @@ const DEFAULT_QUIZ_QUESTIONS = [
   {
     id: 'q4',
     number: 4,
+    sectionId: 'section-1',
     prompt: 'A page has a huge heading, a smaller description, and one highly visible primary button. Which UI principle is being used?',
     options: ['Database normalization', 'User authentication', 'Visual hierarchy', 'Server hosting'],
     correct: 'Visual hierarchy',
@@ -33,6 +38,7 @@ const DEFAULT_QUIZ_QUESTIONS = [
   {
     id: 'q5',
     number: 5,
+    sectionId: 'section-1',
     prompt: 'On desktop, four course cards appear in one row. On mobile, they become one card per row. Why?',
     options: ['Responsive layout', 'Dynamic content', 'Website navigation', 'Database structure'],
     correct: 'Responsive layout',
@@ -40,6 +46,7 @@ const DEFAULT_QUIZ_QUESTIONS = [
   {
     id: 'q6',
     number: 6,
+    sectionId: 'section-1',
     prompt: 'Which checkout flow is most logical for an online store?',
     options: ['Payment → Product → Cart → Confirmation → Checkout', 'Product → Cart → Checkout → Payment → Confirmation', 'Confirmation → Product → Payment → Cart → Checkout', 'Cart → Confirmation → Product → Checkout → Payment'],
     correct: 'Product → Cart → Checkout → Payment → Confirmation',
@@ -47,6 +54,7 @@ const DEFAULT_QUIZ_QUESTIONS = [
   {
     id: 'q7',
     number: 7,
+    sectionId: 'section-1',
     prompt: 'You must choose between two mobile login designs. Design A: Tiny text and a small Login button. Design B: Readable text, clear spacing, and an easy-to-tap button. Which is better?',
     options: ['Design B', 'Design A', 'Both are equally usable', 'Neither needs mobile design'],
     correct: 'Design B',
@@ -54,6 +62,7 @@ const DEFAULT_QUIZ_QUESTIONS = [
   {
     id: 'q8',
     number: 8,
+    sectionId: 'section-1',
     prompt: 'A dashboard has sidebar navigation, a welcome message, statistics cards, recent activity, and quick action buttons. Which statement is best?',
     options: ['It combines information and actions', 'It is only a landing page', 'It is only a navigation bar', 'It is only a database'],
     correct: 'It combines information and actions',
@@ -61,6 +70,7 @@ const DEFAULT_QUIZ_QUESTIONS = [
   {
     id: 'q9',
     number: 9,
+    sectionId: 'section-1',
     prompt: 'Two buttons perform different actions. One is blue and filled, while the other is light and less prominent. Why might this be good UI?',
     options: ['It creates action hierarchy', 'It removes user flow', 'It stores more data', 'It changes the domain'],
     correct: 'It creates action hierarchy',
@@ -68,6 +78,7 @@ const DEFAULT_QUIZ_QUESTIONS = [
   {
     id: 'q10',
     number: 10,
+    sectionId: 'section-1',
     prompt: 'A website works well on desktop, but on mobile the menu overlaps text, buttons go off-screen, and cards are cut off. What should be improved first?',
     options: ['Footer content', 'Database security', 'Domain naming', 'Responsive design'],
     correct: 'Responsive design',
@@ -207,6 +218,7 @@ const getCurrentPath = () => {
 const normalizeQuestion = (question, index) => ({
   id: `q${question.id || index + 1}`,
   number: index + 1,
+  sectionId: question.sectionId || question.section_id || 'section-1',
   prompt: question.prompt,
   options: Array.isArray(question.options) ? question.options : JSON.parse(question.options || '[]'),
   correct: question.correct,
@@ -247,6 +259,10 @@ function App() {
   const [sectionSuccess, setSectionSuccess] = useState('')
 
   const activeSection = sections.find((section) => section.id === selectedSectionId) || sections[0] || { id: 'section-1', heading: 'Section 1: Web Fundamentals', description: 'Please stay focused and keep the tab active while answering.' }
+  const visibleQuestions = useMemo(
+    () => filterQuestionsBySection(questions, selectedSectionId, activeSection.id),
+    [questions, selectedSectionId, activeSection.id],
+  )
 
   useEffect(() => {
     setSelectedSectionId((current) => {
@@ -378,7 +394,7 @@ function App() {
     setRoute(nextPath)
   }
 
-  const currentQuestion = questions[currentIndex] || questions[0]
+  const currentQuestion = visibleQuestions[currentIndex] || visibleQuestions[0]
 
   useEffect(() => {
     if (route !== '/result') return
@@ -451,7 +467,7 @@ function App() {
   }
 
   const goNext = () => {
-    if (currentIndex < questions.length - 1) {
+    if (currentIndex < visibleQuestions.length - 1) {
       setCurrentIndex((index) => index + 1)
     }
   }
@@ -463,22 +479,22 @@ function App() {
   }
 
   const finishQuiz = async () => {
-    if (!questions.length) return
+    if (!visibleQuestions.length) return
 
-    const answerList = questions.map((question) => ({
+    const answerList = visibleQuestions.map((question) => ({
       questionId: question.id,
       selectedOption: answers[question.id] || 'No answer',
       isCorrect: answers[question.id] === question.correct,
     }))
 
     const score = answerList.filter((answer) => answer.isCorrect).length
-    const percentage = (score / questions.length) * 100
+    const percentage = (score / visibleQuestions.length) * 100
     const attempt = {
       id: Date.now(),
       name: name.trim(),
       email: email.trim().toLowerCase(),
       score,
-      totalQuestions: questions.length,
+      totalQuestions: visibleQuestions.length,
       percentage,
       answers: answerList,
       sectionId: activeSection.id,
@@ -496,6 +512,7 @@ function App() {
           total_questions: attempt.totalQuestions,
           percentage: attempt.percentage,
           answers: attempt.answers,
+          section_id: attempt.sectionId,
         }),
       })
     } catch (error) {
@@ -671,6 +688,7 @@ function App() {
     const nextQuestion = {
       id: `q${Date.now()}`,
       number: questions.length + 1,
+      sectionId: selectedSectionId,
       prompt: trimmedPrompt,
       options: cleanedOptions,
       correct: chosenCorrect,
@@ -895,38 +913,22 @@ function App() {
                     ))}
                   </div>
 
-                  {pendingApprovals.length > 0 && (
-                    <div className="approval-panel">
-                      <h3>Pending approval requests</h3>
-                      {pendingApprovals.map((approval) => (
-                        <div key={approval.id} className="approval-item">
-                          <div>
-                            <strong>{approval.name}</strong>
-                            <p>{approval.email}</p>
-                            <span>{approval.heading}</span>
-                          </div>
-                          <button type="button" className="secondary-button small-button" onClick={() => approvePendingAccess(approval.id)}>
-                            Approve
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
                   <div className="question-table-wrap">
                     <table>
                       <thead>
                         <tr>
                           <th>#</th>
                           <th>Question</th>
+                          <th>Section</th>
                           <th>Correct answer</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {questions.map((question, index) => (
+                        {questions.filter((question) => question.sectionId === selectedSectionId || (!question.sectionId && selectedSectionId === 'section-1')).map((question, index) => (
                           <tr key={question.id}>
                             <td>{index + 1}</td>
                             <td>{question.prompt}</td>
+                            <td>{sections.find((section) => section.id === (question.sectionId || selectedSectionId))?.heading || 'Section 1'}</td>
                             <td>{question.correct}</td>
                           </tr>
                         ))}
@@ -935,6 +937,18 @@ function App() {
                   </div>
 
                   <form className="quiz-builder-form" onSubmit={addQuestion}>
+                    <label className="field">
+                      <span>Question section</span>
+                      <select
+                        value={selectedSectionId}
+                        onChange={(event) => setSelectedSectionId(event.target.value)}
+                      >
+                        {sections.map((section) => (
+                          <option key={section.id} value={section.id}>{section.heading}</option>
+                        ))}
+                      </select>
+                    </label>
+
                     <label className="field">
                       <span>Question prompt</span>
                       <textarea
@@ -994,8 +1008,26 @@ function App() {
   }
 
   if (route === '/quiz') {
+    if (!visibleQuestions.length) {
+      return (
+        <main className="page-shell">
+          {renderHeader('/')} 
+          <section className="quiz-page">
+            <div className="locked-panel">
+              <p className="eyebrow">Section empty</p>
+              <h1>No questions available in this section yet.</h1>
+              <p>Choose another section or ask the admin to add a question for this part of the quiz.</p>
+              <div className="locked-actions">
+                <button type="button" className="secondary-button" onClick={() => navigate('/')}>Return home</button>
+              </div>
+            </div>
+          </section>
+        </main>
+      )
+    }
+
     const selectedOption = answers[currentQuestion.id]
-    const isLastQuestion = currentIndex === questions.length - 1
+    const isLastQuestion = currentIndex === visibleQuestions.length - 1
     const answeredCount = Object.keys(answers).length
 
     if (quizSuspended) {
@@ -1044,7 +1076,7 @@ function App() {
           </div>
 
           <div className="progress-bar">
-            <span style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }} />
+            <span style={{ width: `${((currentIndex + 1) / visibleQuestions.length) * 100}%` }} />
           </div>
 
           <article className="question-card">
@@ -1236,6 +1268,21 @@ function App() {
           </div>
 
           <form className="start-form" onSubmit={startQuiz}>
+            <div className="section-panel">
+              <p className="eyebrow muted">Available section</p>
+              {sections.map((section) => (
+                <div key={section.id} className={selectedSectionId === section.id ? 'section-card landing selected' : 'section-card landing'}>
+                  <div>
+                    <strong>{section.heading}</strong>
+                    <p>{section.description}</p>
+                  </div>
+                  <button type="button" className="secondary-button small-button" onClick={() => setSelectedSectionId(section.id)}>
+                    {selectedSectionId === section.id ? 'Opened' : 'Open'}
+                  </button>
+                </div>
+              ))}
+            </div>
+
             <label className="field">
               <span>Your name</span>
               <div className="input-wrap">
@@ -1251,21 +1298,6 @@ function App() {
                 <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" />
               </div>
             </label>
-
-            <div className="section-panel">
-              <p className="eyebrow muted">Available section</p>
-              {sections.map((section) => (
-                <div key={section.id} className={selectedSectionId === section.id ? 'section-card landing selected' : 'section-card landing'}>
-                  <div>
-                    <strong>{section.heading}</strong>
-                    <p>{section.description}</p>
-                  </div>
-                  <button type="button" className="secondary-button small-button" onClick={() => setSelectedSectionId(section.id)}>
-                    {selectedSectionId === section.id ? 'Opened' : 'Open'}
-                  </button>
-                </div>
-              ))}
-            </div>
 
             {startError && <p className="form-error">{startError}</p>}
 
