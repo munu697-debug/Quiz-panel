@@ -31,8 +31,14 @@
   border-radius: 12px;
   background: var(--accent);
   color: #fffaf5;
-  font-weight: 800;
   box-shadow: 0 10px 20px rgba(232, 94, 61, 0.22);
+  overflow: hidden;
+}
+
+.brand-mark svg {
+  width: 24px;
+  height: 24px;
+  display: block;
 }
 
 .brand-copy {

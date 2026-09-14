@@ -76,6 +76,18 @@ const DEFAULT_QUIZ_QUESTIONS = [
 
 const STORAGE_QUESTIONS_KEY = 'quiz-custom-questions'
 const ADMIN_CODE = 'Demo@7078'
+const LEGACY_QUESTION_PROMPTS = [
+  'Which HTML element is the best choice for the main content region of a page?',
+  'In CSS, which property controls the space between the border and the content inside an element?',
+  'Which JavaScript declaration keeps a value from being reassigned?',
+  'Which DOM API selects the first matching element in the document?',
+  'What is the most common method to fetch JSON data from a server in the browser?',
+  'Which accessibility attribute is most important for an informative image?',
+  'Why is rel="noopener noreferrer" often added to external links opened in a new tab?',
+  'Which CSS layout tool is best for aligning items in rows or columns with responsive spacing?',
+  'A server returns HTTP 404. What does that usually mean?',
+  'Which approach best supports mobile-friendly layouts on modern websites?',
+]
 
 const fetchJson = async (url, options) => {
   const response = await fetch(url, {
@@ -97,6 +109,15 @@ const getQuizQuestions = () => {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_QUESTIONS_KEY) || 'null')
     if (Array.isArray(saved) && saved.length > 0) {
+      const hasLegacyQuestion = saved.some((question) =>
+        typeof question?.prompt === 'string' && LEGACY_QUESTION_PROMPTS.includes(question.prompt),
+      )
+
+      if (hasLegacyQuestion) {
+        localStorage.setItem(STORAGE_QUESTIONS_KEY, JSON.stringify(DEFAULT_QUIZ_QUESTIONS))
+        return DEFAULT_QUIZ_QUESTIONS
+      }
+
       return saved
     }
   } catch {
@@ -183,8 +204,13 @@ function App() {
         const data = await fetchJson('http://localhost:3001/api/questions')
         if (Array.isArray(data.questions) && data.questions.length > 0) {
           const normalizedQuestions = data.questions.map((question, index) => normalizeQuestion(question, index))
-          setQuestions(normalizedQuestions)
-          saveQuizQuestions(normalizedQuestions)
+          const hasLegacyQuestion = normalizedQuestions.some((question) =>
+            LEGACY_QUESTION_PROMPTS.includes(question.prompt),
+          )
+
+          const nextQuestions = hasLegacyQuestion ? DEFAULT_QUIZ_QUESTIONS : normalizedQuestions
+          setQuestions(nextQuestions)
+          saveQuizQuestions(nextQuestions)
         }
       } catch {
         setQuestions(getQuizQuestions())
@@ -470,7 +496,13 @@ function App() {
   const renderHeader = (highlight = '') => (
     <header className="topbar">
       <a className="brand" href="/" onClick={(event) => { event.preventDefault(); navigate('/'); }}>
-        <span className="brand-mark">✓</span>
+        <span className="brand-mark" aria-label="Web Fundamentals logo">
+          <svg viewBox="0 0 64 64" aria-hidden="true">
+            <rect x="8" y="8" width="48" height="48" rx="14" fill="currentColor" opacity="0.18" />
+            <path d="M18 35.5L28.5 46L46 26.5" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M20 16H44V26H20z" fill="currentColor" opacity="0.18" />
+          </svg>
+        </span>
         <span className="brand-copy">
           <span className="brand-kicker">WEB FUNDAMENTALS</span>
           <span className="brand-title">Checkpoint</span>

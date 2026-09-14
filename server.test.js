@@ -50,3 +50,30 @@ test('question creation requires admin verification', async () => {
     })
   }
 })
+
+test('admin reset restores the default questions', async () => {
+  const { server, baseUrl } = await startTestServer()
+
+  try {
+    const reset = await fetch(`${baseUrl}/api/questions/reset`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Code': 'Demo@7078',
+      },
+    })
+
+    assert.equal(reset.status, 200)
+    const payload = await reset.json()
+    assert.equal(payload.ok, true)
+    assert.equal(Array.isArray(payload.questions), true)
+    assert.ok(payload.questions.length > 0)
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((error) => {
+        if (error) reject(error)
+        else resolve()
+      })
+    })
+  }
+})
