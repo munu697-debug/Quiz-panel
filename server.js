@@ -364,6 +364,48 @@ app.post('/api/sections', requireAdmin, async (req, res) => {
   }
 })
 
+app.delete('/api/sections/:sectionKey', requireAdmin, async (req, res) => {
+  const { sectionKey } = req.params
+
+  if (!sectionKey) {
+    return res.status(400).json({ ok: false, error: 'Section key is required.' })
+  }
+
+  if (!pool) {
+    return res.json({ ok: true, deleted: true })
+  }
+
+  try {
+    await pool.query('DELETE FROM quiz_section_questions WHERE section_key = $1', [sectionKey])
+    await pool.query('DELETE FROM quiz_questions WHERE section_id = $1', [sectionKey])
+    await pool.query('DELETE FROM quiz_sections WHERE section_key = $1', [sectionKey])
+    res.json({ ok: true, deleted: true })
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message })
+  }
+})
+
+app.delete('/api/questions/:questionId', requireAdmin, async (req, res) => {
+  const { questionId } = req.params
+
+  if (!questionId) {
+    return res.status(400).json({ ok: false, error: 'Question id is required.' })
+  }
+
+  if (!pool) {
+    return res.json({ ok: true, deleted: true })
+  }
+
+  try {
+    const parsedId = Number(questionId)
+    await pool.query('DELETE FROM quiz_section_questions WHERE question_id = $1', [parsedId])
+    await pool.query('DELETE FROM quiz_questions WHERE id = $1', [parsedId])
+    res.json({ ok: true, deleted: true })
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message })
+  }
+})
+
 app.get('/api/results', async (_req, res) => {
   if (!pool) {
     return res.json({ results: inMemoryResults })
@@ -381,8 +423,8 @@ app.post('/api/questions', requireAdmin, async (req, res) => {
   try {
     const { prompt, options, correct, sectionId } = req.body || {}
 
-    if (!prompt || !Array.isArray(options) || options.length !== 4 || !correct) {
-      return res.status(400).json({ ok: false, error: 'Invalid question payload' })
+    if (!prompt || !Array.isArray(options) || options.length < 2 || !correct) {
+      return res.status(400).json({ ok: false, error: 'Each question needs at least two answer options and a correct answer.' })
     }
 
     if (!pool) {

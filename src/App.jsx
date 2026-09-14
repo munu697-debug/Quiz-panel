@@ -607,6 +607,33 @@ function App() {
     setPendingApprovals(approvals.filter((approval) => approval.id !== approvalId))
   }
 
+  const deleteSection = async (sectionId) => {
+    const targetSection = sections.find((section) => section.id === sectionId)
+    if (!targetSection) return
+
+    const nextSections = sections.filter((section) => section.id !== sectionId)
+    try {
+      await fetchJson(`http://localhost:3001/api/sections/${encodeURIComponent(targetSection.id)}`, {
+        method: 'DELETE',
+        headers: {
+          'X-Admin-Code': ADMIN_CODE,
+        },
+      })
+    } catch (error) {
+      console.error('Delete section failed', error)
+      setSectionError('This section could not be deleted from the database.')
+      return
+    }
+
+    setSections(nextSections)
+    saveSections(nextSections)
+    if (selectedSectionId === sectionId) {
+      setSelectedSectionId(nextSections[0]?.id || 'section-1')
+    }
+    setSectionError('')
+    setSectionSuccess(`Section deleted successfully: ${targetSection.heading}`)
+  }
+
   const addSection = (event) => {
     event.preventDefault()
     const trimmedHeading = newSectionHeading.trim()
@@ -661,6 +688,51 @@ function App() {
     }))
   }
 
+  const addQuestionOption = () => {
+    setNewQuestion((previous) => ({
+      ...previous,
+      options: [...previous.options, ''],
+    }))
+  }
+
+  const removeQuestionOption = (index) => {
+    setNewQuestion((previous) => {
+      if (previous.options.length <= 2) {
+        return previous
+      }
+
+      const nextOptions = previous.options.filter((_, optionIndex) => optionIndex !== index)
+      const nextCorrect = previous.correct && nextOptions.includes(previous.correct) ? previous.correct : nextOptions[0] || ''
+
+      return {
+        ...previous,
+        options: nextOptions,
+        correct: nextCorrect,
+      }
+    })
+  }
+
+  const deleteQuestion = async (questionId) => {
+    try {
+      await fetchJson(`http://localhost:3001/api/questions/${encodeURIComponent(questionId)}`, {
+        method: 'DELETE',
+        headers: {
+          'X-Admin-Code': ADMIN_CODE,
+        },
+      })
+
+      const nextQuestions = questions.filter((question) => String(question.id) !== String(questionId))
+      setQuestions(nextQuestions)
+      saveQuizQuestions(nextQuestions)
+      setQuestionError('')
+      setQuestionSuccess('Question deleted successfully.')
+    } catch (error) {
+      console.error('Delete question failed', error)
+      setQuestionError('This question could not be deleted from the database.')
+      setQuestionSuccess('')
+    }
+  }
+
   const addQuestion = (event) => {
     event.preventDefault()
     const trimmedPrompt = newQuestion.prompt.trim()
@@ -672,8 +744,8 @@ function App() {
       return
     }
 
-    if (cleanedOptions.length !== 4) {
-      setQuestionError('Each question needs exactly four answer options.')
+    if (cleanedOptions.length < 2) {
+      setQuestionError('Each question needs at least two answer options.')
       setQuestionSuccess('')
       return
     }
@@ -906,9 +978,14 @@ function App() {
                           <p className="eyebrow muted">Section</p>
                           <h3>{section.heading}</h3>
                         </div>
-                        <button type="button" className="secondary-button small-button" onClick={() => setSelectedSectionId(section.id)}>
-                          {selectedSectionId === section.id ? 'Selected' : 'Open'}
-                        </button>
+                        <div className="inline-button-group">
+                          <button type="button" className="secondary-button small-button" onClick={() => setSelectedSectionId(section.id)}>
+                            {selectedSectionId === section.id ? 'Selected' : 'Open'}
+                          </button>
+                          <button type="button" className="secondary-button small-button danger-button" onClick={() => deleteSection(section.id)}>
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -929,7 +1006,14 @@ function App() {
                             <td>{index + 1}</td>
                             <td>{question.prompt}</td>
                             <td>{sections.find((section) => section.id === (question.sectionId || selectedSectionId))?.heading || 'Section 1'}</td>
-                            <td>{question.correct}</td>
+                            <td>
+                              <div className="inline-button-group">
+                                <span>{question.correct}</span>
+                                <button type="button" className="secondary-button small-button danger-button" onClick={() => deleteQuestion(question.id)}>
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -961,17 +1045,31 @@ function App() {
 
                     <div className="option-grid">
                       {newQuestion.options.map((option, index) => (
-                        <label className="field" key={`option-${index}`}>
-                          <span>Option {index + 1}</span>
-                          <input
-                            type="text"
-                            value={option}
-                            onChange={(event) => handleNewQuestionInput(index, event.target.value)}
-                            placeholder={`Option ${index + 1}`}
-                          />
-                        </label>
+                        <div className="option-input-row" key={`option-${index}`}>
+                          <label className="field">
+                            <span>Option {index + 1}</span>
+                            <input
+                              type="text"
+                              value={option}
+                              onChange={(event) => handleNewQuestionInput(index, event.target.value)}
+                              placeholder={`Option ${index + 1}`}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            className="secondary-button small-button danger-button"
+                            onClick={() => removeQuestionOption(index)}
+                            disabled={newQuestion.options.length <= 2}
+                          >
+                            Remove
+                          </button>
+                        </div>
                       ))}
                     </div>
+
+                    <button type="button" className="secondary-button small-button" onClick={addQuestionOption}>
+                      Add option
+                    </button>
 
                     <label className="field">
                       <span>Correct answer</span>
