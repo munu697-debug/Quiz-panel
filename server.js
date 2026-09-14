@@ -20,6 +20,15 @@ const pool = hasDatabase
     })
   : null
 
+const DEFAULT_SECTIONS = [
+  {
+    sectionKey: 'section-1',
+    title: 'General Quiz: Web Fundamentals',
+    description: 'Web fundamentals checkpoint covering structure, UX, and responsive design.',
+    sortOrder: 1,
+  },
+]
+
 const DEFAULT_QUESTIONS = [
   {
     sectionId: 'section-1',
@@ -114,11 +123,50 @@ const isRlsPermissionError = (error) => {
   return /row level security|permission denied|42501|RLS|policy/i.test(message)
 }
 
-const insertDefaultQuestions = async (questionList = DEFAULT_QUESTIONS) => {
-  for (const question of questionList) {
+const normalizeSectionRow = (section, index = 0) => {
+  const sectionKey = section.section_key || section.sectionKey || section.section_id || section.id || `section-${index + 1}`
+  const title = section.title || section.heading || `Section ${index + 1}`
+  return {
+    id: Number(section.id ?? index + 1),
+    sectionId: String(sectionKey),
+    section_key: sectionKey,
+    title,
+    heading: title,
+    description: section.description || '',
+    sort_order: Number(section.sort_order ?? section.sortOrder ?? index + 1),
+  }
+}
+
+const getDefaultSections = () => DEFAULT_SECTIONS.map((section, index) => normalizeSectionRow({ ...section, id: index + 1 }, index))
+
+const insertDefaultSections = async (sectionList = DEFAULT_SECTIONS) => {
+  for (const [index, section] of sectionList.entries()) {
+    const sectionKey = section.sectionKey || section.section_key || `section-${index + 1}`
     await pool.query(
-      'INSERT INTO quiz_questions (section_id, prompt, options, correct) VALUES ($1, $2, $3, $4)',
-      [question.sectionId || question.section_id || 'section-1', question.prompt, JSON.stringify(question.options), question.correct],
+      `INSERT INTO quiz_sections (section_key, title, description, sort_order)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (section_key) DO UPDATE SET
+         title = EXCLUDED.title,
+         description = EXCLUDED.description,
+         sort_order = EXCLUDED.sort_order`,
+      [sectionKey, section.title || `Section ${index + 1}`, section.description || '', section.sortOrder || index + 1],
+    )
+  }
+}
+
+const insertDefaultQuestions = async (questionList = DEFAULT_QUESTIONS) => {
+  for (const [index, question] of questionList.entries()) {
+    const sectionKey = question.sectionId || question.section_id || 'section-1'
+    const result = await pool.query(
+      'INSERT INTO quiz_questions (section_id, prompt, options, correct) VALUES ($1, $2, $3, $4) RETURNING id',
+      [sectionKey, question.prompt, JSON.stringify(question.options), question.correct],
+    )
+
+    await pool.query(
+      `INSERT INTO quiz_section_questions (section_key, question_id, sort_order)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (section_key, question_id) DO UPDATE SET sort_order = EXCLUDED.sort_order`,
+      [sectionKey, result.rows[0].id, index + 1],
     )
   }
 }
@@ -128,7 +176,9 @@ const resetQuestionsToDefaults = async (questionList = DEFAULT_QUESTIONS) => {
     return
   }
 
+  await pool.query('DELETE FROM quiz_section_questions')
   await pool.query('DELETE FROM quiz_questions')
+  await insertDefaultSections(DEFAULT_SECTIONS)
   await insertDefaultQuestions(questionList)
 }
 
@@ -138,6 +188,15 @@ const initializeDatabase = async () => {
   if (!pool || databaseReady) return
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS quiz_sections (
+      id SERIAL PRIMARY KEY,
+      section_key TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS quiz_questions (
       id SERIAL PRIMARY KEY,
       section_id TEXT NOT NULL DEFAULT 'section-1',
@@ -145,6 +204,16 @@ const initializeDatabase = async () => {
       options JSONB NOT NULL,
       correct TEXT NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS quiz_section_questions (
+      id SERIAL PRIMARY KEY,
+      section_key TEXT NOT NULL,
+      question_id INTEGER NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(section_key, question_id),
+      UNIQUE(section_key, sort_order)
     );
 
     CREATE TABLE IF NOT EXISTS quiz_results (
@@ -160,10 +229,18 @@ const initializeDatabase = async () => {
   `)
 
   await pool.query(`ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS section_id TEXT NOT NULL DEFAULT 'section-1';`)
+  await pool.query(`ALTER TABLE quiz_sections ADD COLUMN IF NOT EXISTS section_key TEXT;`)
+  await pool.query(`ALTER TABLE quiz_sections ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';`)
+  await pool.query(`ALTER TABLE quiz_sections ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;`)
+
+  const sectionCount = await pool.query('SELECT COUNT(*) AS count FROM quiz_sections')
+  if (Number(sectionCount.rows[0].count) === 0) {
+    await insertDefaultSections(DEFAULT_SECTIONS)
+  }
 
   const questionCount = await pool.query('SELECT COUNT(*) AS count FROM quiz_questions')
   if (Number(questionCount.rows[0].count) === 0) {
-    await insertDefaultQuestions()
+    await insertDefaultQuestions(DEFAULT_QUESTIONS)
     databaseReady = true
     return
   }
@@ -188,6 +265,16 @@ app.use(async (_req, _res, next) => {
   next()
 })
 
+const requireAdmin = (req, res, next) => {
+  const adminCode = req.get('x-admin-code') || req.body?.adminCode
+
+  if (adminCode !== ADMIN_CODE) {
+    return res.status(401).json({ ok: false, error: 'Admin access required.' })
+  }
+
+  next()
+}
+
 app.get('/api/health', async (_req, res) => {
   if (!pool) {
     return res.json({ ok: true, mode: 'local', message: 'Database not configured; using in-memory fallback storage.' })
@@ -207,11 +294,71 @@ app.get('/api/questions', async (_req, res) => {
   }
 
   try {
-    const result = await pool.query('SELECT * FROM quiz_questions ORDER BY id')
+    const result = await pool.query(`
+      SELECT q.*, s.title AS section_title
+      FROM quiz_questions q
+      LEFT JOIN quiz_sections s ON s.section_key = q.section_id
+      ORDER BY q.id
+    `)
     res.json({ questions: result.rows.map((question) => ({
       ...question,
       sectionId: question.section_id || question.sectionId || 'section-1',
+      sectionTitle: question.section_title || 'General Quiz',
     })) })
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message })
+  }
+})
+
+app.get('/api/sections', async (_req, res) => {
+  if (!pool) {
+    return res.json({ sections: getDefaultSections() })
+  }
+
+  try {
+    const result = await pool.query(
+      'SELECT * FROM quiz_sections ORDER BY sort_order ASC, id ASC',
+    )
+    res.json({
+      sections: result.rows.map((section, index) => normalizeSectionRow(section, index)),
+    })
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message })
+  }
+})
+
+app.post('/api/sections', requireAdmin, async (req, res) => {
+  const { title, description, sectionKey, sortOrder } = req.body || {}
+
+  if (!title || !String(title).trim()) {
+    return res.status(400).json({ ok: false, error: 'Section title is required.' })
+  }
+
+  if (!pool) {
+    const nextSection = {
+      id: Date.now(),
+      sectionKey: sectionKey || `section-${Date.now()}`,
+      title: String(title).trim(),
+      description: description || '',
+      sortOrder: Number(sortOrder || 0),
+    }
+    return res.json({ ok: true, section: nextSection })
+  }
+
+  try {
+    const key = sectionKey || `section-${Date.now()}`
+    const row = await pool.query(
+      `INSERT INTO quiz_sections (section_key, title, description, sort_order)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (section_key) DO UPDATE SET
+         title = EXCLUDED.title,
+         description = EXCLUDED.description,
+         sort_order = EXCLUDED.sort_order
+       RETURNING *`,
+      [key, String(title).trim(), description || '', Number(sortOrder || 0)],
+    )
+
+    res.json({ ok: true, section: normalizeSectionRow(row.rows[0], 0) })
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message })
   }
@@ -229,16 +376,6 @@ app.get('/api/results', async (_req, res) => {
     res.status(500).json({ ok: false, error: error.message })
   }
 })
-
-const requireAdmin = (req, res, next) => {
-  const adminCode = req.get('x-admin-code') || req.body?.adminCode
-
-  if (adminCode !== ADMIN_CODE) {
-    return res.status(401).json({ ok: false, error: 'Admin access required.' })
-  }
-
-  next()
-}
 
 app.post('/api/questions', requireAdmin, async (req, res) => {
   try {
@@ -263,6 +400,20 @@ app.post('/api/questions', requireAdmin, async (req, res) => {
     const result = await pool.query(
       `INSERT INTO quiz_questions (section_id, prompt, options, correct) VALUES ($1, $2, $3, $4) RETURNING *`,
       [sectionId || 'section-1', prompt, JSON.stringify(options), correct],
+    )
+
+    const nextSortOrder = await pool.query(
+      `SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order
+       FROM quiz_section_questions
+       WHERE section_key = $1`,
+      [sectionId || 'section-1'],
+    )
+
+    await pool.query(
+      `INSERT INTO quiz_section_questions (section_key, question_id, sort_order)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (section_key, question_id) DO UPDATE SET sort_order = EXCLUDED.sort_order`,
+      [sectionId || 'section-1', result.rows[0].id, Number(nextSortOrder.rows[0].next_sort_order)],
     )
 
     res.json({ ok: true, question: result.rows[0] })

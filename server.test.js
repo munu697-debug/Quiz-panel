@@ -77,3 +77,24 @@ test('admin reset restores the default questions', async () => {
     })
   }
 })
+
+test('sections API exposes real database-backed sections with migrated defaults', async () => {
+  const { server, baseUrl } = await startTestServer()
+
+  try {
+    const sectionsResponse = await fetch(`${baseUrl}/api/sections`)
+    assert.equal(sectionsResponse.status, 200)
+
+    const sectionsPayload = await sectionsResponse.json()
+    assert.equal(Array.isArray(sectionsPayload.sections), true)
+    assert.ok(sectionsPayload.sections.length > 0)
+    assert.ok(sectionsPayload.sections.some((section) => section.title.includes('General Quiz') || section.title.includes('Section 1')))
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((error) => {
+        if (error) reject(error)
+        else resolve()
+      })
+    })
+  }
+})
