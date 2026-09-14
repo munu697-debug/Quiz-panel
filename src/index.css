@@ -1,15 +1,17 @@
 :root {
-  --background: 220 33% 97%;
-  --foreground: 220 28% 16%;
-  --primary: 14 88% 58%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 188 72% 82%;
-  --secondary-foreground: 220 28% 16%;
-  --muted: 220 17% 46%;
-  --card: 0 0% 100%;
-  --border: 220 28% 90%;
-  --accent: 26 95% 62%;
-  --input: 220 50% 99%;
+  --background: 224 29% 9%;
+  --background-strong: 228 32% 7%;
+  --foreground: 218 24% 96%;
+  --primary: 203 94% 63%;
+  --primary-strong: 235 89% 67%;
+  --secondary: 184 79% 63%;
+  --muted: 220 12% 72%;
+  --card: 221 28% 14%;
+  --card-strong: 224 30% 18%;
+  --border: 220 20% 26%;
+  --input: 222 25% 11%;
+  --success: 162 71% 46%;
+  --warning: 34 98% 62%;
 
   font-family: Inter, 'Segoe UI', sans-serif;
   line-height: 1.5;
@@ -20,7 +22,7 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 * {
@@ -36,13 +38,39 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(14, 165, 233, 0.08), transparent 28%),
-    radial-gradient(circle at right center, rgba(251, 146, 60, 0.1), transparent 34%),
-    hsl(var(--background));
+    radial-gradient(circle at top left, rgba(96, 165, 250, 0.18), transparent 26%),
+    radial-gradient(circle at bottom right, rgba(168, 85, 247, 0.12), transparent 28%),
+    linear-gradient(145deg, hsl(var(--background-strong)) 0%, hsl(var(--background)) 42%, hsl(var(--background-strong)) 100%);
+  color: hsl(var(--foreground));
+  position: relative;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(circle at center, rgba(0,0,0,0.85) 30%, transparent 100%);
+  -webkit-mask-image: radial-gradient(circle at center, rgba(0,0,0,0.85) 30%, transparent 100%);
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(10, 15, 27, 0.18), rgba(10, 15, 27, 0.42));
+  pointer-events: none;
 }
 
 button,
-input {
+input,
+textarea,
+select {
   font: inherit;
 }
 
