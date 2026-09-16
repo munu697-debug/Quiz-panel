@@ -336,6 +336,17 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const onStorageChange = (event) => {
+      if (event.key === STORAGE_PENDING_APPROVALS_KEY) {
+        setPendingApprovals(getPendingApprovals())
+      }
+    }
+
+    window.addEventListener('storage', onStorageChange)
+    return () => window.removeEventListener('storage', onStorageChange)
+  }, [])
+
+  useEffect(() => {
     const checkDb = async () => {
       try {
         await fetchJson('http://localhost:3001/api/health')
@@ -439,16 +450,13 @@ function App() {
       return
     }
 
-    const pendingApproval = getPendingApprovals().find(
-      (approval) => approval.email === trimmedEmail && !approval.approved,
-    )
+    const latestApproval = getPendingApprovals()
+      .filter((approval) => approval.email === trimmedEmail)
+      .at(-1)
 
-    if (pendingApproval) {
-      const approvedEmails = getApprovedEmails()
-      if (!approvedEmails.includes(trimmedEmail)) {
-        setStartError('This attempt is waiting for admin approval after a security warning. Please try again after approval.')
-        return
-      }
+    if (latestApproval && !latestApproval.approved) {
+      setStartError('This attempt is waiting for admin approval after a security warning. Please try again after approval.')
+      return
     }
 
     setAnswers({})
@@ -594,17 +602,19 @@ function App() {
   }
 
   const approvePendingAccess = (approvalId) => {
-    const approvals = getPendingApprovals().map((approval) =>
-      approval.id === approvalId ? { ...approval, approved: true } : approval,
-    )
+    const approvals = getPendingApprovals().map((approval) => (
+      approval.id === approvalId
+        ? { ...approval, approved: true, approvedAt: new Date().toISOString() }
+        : approval
+    ))
     const approvedEmails = new Set(getApprovedEmails())
     const approvedApproval = approvals.find((approval) => approval.id === approvalId)
     if (approvedApproval) {
       approvedEmails.add(approvedApproval.email)
       saveApprovedEmails([...approvedEmails])
     }
-    savePendingApprovals(approvals.filter((approval) => approval.id !== approvalId))
-    setPendingApprovals(approvals.filter((approval) => approval.id !== approvalId))
+    savePendingApprovals(approvals)
+    setPendingApprovals(approvals)
   }
 
   const deleteSection = async (sectionId) => {
@@ -873,6 +883,27 @@ function App() {
                     <p>DB</p>
                     <strong>{dbStatus === 'connected' ? 'Live' : 'Offline'}</strong>
                   </div>
+                </div>
+
+                <div className="table-card approval-panel">
+                  <h2>Security approvals</h2>
+                  <p className="supporting-copy">Review participants who left the assessment and approve access again when ready.</p>
+                  {pendingApprovals.length === 0 ? (
+                    <p className="empty-state">No security approval requests yet.</p>
+                  ) : (
+                    pendingApprovals.slice().reverse().map((approval) => (
+                      <div className="approval-item" key={approval.id}>
+                        <div>
+                          <strong>{approval.name}</strong>
+                          <p>{approval.email}</p>
+                          <span>{approval.heading || 'General'} · {approval.approved ? 'Approved' : 'Waiting for approval'}</span>
+                        </div>
+                        <button type="button" className="secondary-button small-button" onClick={() => approvePendingAccess(approval.id)}>
+                          {approval.approved ? 'Approve again' : 'Approve access'}
+                        </button>
+                      </div>
+                    ))
+                  )}
                 </div>
 
                 <div className="table-card">
