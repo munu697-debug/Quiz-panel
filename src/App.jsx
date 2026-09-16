@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { filterQuestionsBySection } from './quizLogic.js'
-import './App.css'
 
 const DEFAULT_QUIZ_QUESTIONS = [
   {
